@@ -1,62 +1,88 @@
 ---
 
-- block:
-    - name: Create download directory
-      ansible.builtin.file:
-        path: "{{ github_src_dir }}"
-        state: directory
-        mode: '0755'
+- name: Create OpenCanary User
+  ansible.builtin.user:
+    name: "{{ opencanary_user }}"
+    create_home: yes
+    shell: /bin/bash
+    group: "{{ opencanary_group }}"
+    expires: -1
 
-    - name: Clone GitHub repo
-      ansible.builtin.git:
-        repo: https://github.com/thinkst/opencanary.git
-        dest: "{{ github_src_dir }}"
-        version: "{{ opencanary_version }}"
+- name: Create {{ opencanary_install_dir }}
+  ansible.builtin.file:
+    path: "{{ opencanary_install_dir }}"
+    owner: "{{ opencanary_user }}"
+    group: "{{ opencanary_group }}"
+    mode: '0755'
+    state: directory
 
-    - name: Build Git Release
-      ansible.builtin.shell: 'python3 {{ github_src_dir }}/setup.py sdist'
-      args:
-        chdir: '{{ github_src_dir }}'
+- name: Install OpenCanary
+  block:
 
-    - name: Get opencanary_tar location
-      ansible.builtin.shell: 'ls {{ github_src_dir }}/dist'
-      register: opencanary_tar_name
+  - name: Git Install block
+    block:
+      - name: Create download directory
+        ansible.builtin.file:
+          path: "{{ github_src_dir }}"
+          owner: "{{ opencanary_user }}"
+          group: "{{ opencanary_group }}"
+          state: directory
+          mode: '0755'
 
-    - name: Install opencanary git
-      ansible.builtin.pip:
-        name: 'file://{{ github_src_dir }}/dist/{{ opencanary_tar_name.stdout }}'
-        virtualenv: "{{ opencanary_install_dir }}"
-        virtualenv_command: "/usr/bin/python3 -m venv"
-  when: install_source == "github"
+      - name: Clone GitHub repo
+        ansible.builtin.git:
+          repo: https://github.com/thinkst/opencanary.git
+          dest: "{{ github_src_dir }}"
+          version: "{{ opencanary_version }}"
 
-- name: Install opencanary
-  ansible.builtin.pip:
-    name: opencanary
-    virtualenv: "{{ opencanary_install_dir }}"
-    virtualenv_command: "/usr/bin/python3 -m venv"
-    version: "{{ opencanary_version }}"
-  when: install_source == "pypi"
+      - name: Build Git Release
+        ansible.builtin.shell: 'python3 {{ github_src_dir }}/setup.py sdist'
+        args:
+          chdir: '{{ github_src_dir }}'
 
-- name: Install SMNP python dependencies
-  ansible.builtin.pip:
-    name:
-      - scapy
-      - pcapy-ng
-    virtualenv: "{{ opencanary_install_dir }}"
-    virtualenv_command: "/usr/bin/python3 -m venv"
-  when: snmp_enabled == "true"
+      - name: Get opencanary_tar location
+        ansible.builtin.shell: 'ls {{ github_src_dir }}/dist'
+        register: opencanary_tar_name
 
-- name: Install LLMNR python dependencies
-  ansible.builtin.pip:
-    name:
-      - scapy
-    virtualenv: "{{ opencanary_install_dir }}"
-    virtualenv_command: "/usr/bin/python3 -m venv"
-  when: llmnr_enabled == "true"
+      - name: Install opencanary git
+        ansible.builtin.pip:
+          name: 'file://{{ github_src_dir }}/dist/{{ opencanary_tar_name.stdout }}'
+          virtualenv: "{{ opencanary_install_dir }}"
+          virtualenv_command: "/usr/bin/python3 -m venv"
+    when: install_source == "github"
+
+  - name: Install opencanary pypi
+    ansible.builtin.pip:
+      name: opencanary
+      virtualenv: "{{ opencanary_install_dir }}"
+      virtualenv_command: "/usr/bin/python3 -m venv"
+      version: "{{ opencanary_version }}"
+    when: install_source == "pypi"
+
+  - name: Install SMNP python dependencies
+    ansible.builtin.pip:
+      name:
+        - scapy
+        - pcapy-ng
+      virtualenv: "{{ opencanary_install_dir }}"
+      virtualenv_command: "/usr/bin/python3 -m venv"
+    when: snmp_enabled == "true"
+
+  - name: Install LLMNR python dependencies
+    ansible.builtin.pip:
+      name:
+        - scapy
+      virtualenv: "{{ opencanary_install_dir }}"
+      virtualenv_command: "/usr/bin/python3 -m venv"
+    when: llmnr_enabled == "true"
+  become: yes
+  become_user: "{{ opencanary_user }}"
 
 - name: Create /etc/opencanary
   ansible.builtin.file:
     path: /etc/opencanaryd
+    owner: "{{ opencanary_user }}"
+    group: "{{ opencanary_group }}"
     state: directory
 
 - name: Install opencanaryd.service
@@ -68,6 +94,9 @@
   ansible.builtin.template:
     src: opencanary_conf.jn2
     dest: /etc/opencanaryd/opencanary.conf
+    owner: "{{ opencanary_user }}"
+    group: "{{ opencanary_group }}"
+    mode: '0644'
   register: config
 
 - block:
@@ -79,6 +108,8 @@
     ansible.builtin.copy:
       src: "{{ http_customskin_folder }}"
       dest: "{{ opencanary_install_dir }}/lib/{{ dir.stdout }}/site-packages/opencanary/modules/data/http/skin/"
+      owner: "{{ opencanary_user }}"
+      group: "{{ opencanary_group }}"
   when: http_customskin_folder is defined
 
 - block:

@@ -3,6 +3,12 @@ Role Description
 
 Installs [Thinkst OpenCanary](https://github.com/thinkst/opencanary) and configures options.
 
+NOTE: To use this role, you will need to add the following to your opencanary inventory file.
+```
+[all:vars]
+ansible_shell_allow_world_readable_temp = true
+```
+
 Example Playbooks
 ----------------
 
